@@ -1,11 +1,12 @@
 import logging
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, InlineQueryResultArticle, InputTextMessageContent
 from telegram.ext import (
     Updater, CommandHandler, MessageHandler,
-    Filters, CallbackQueryHandler, ConversationHandler, CallbackContext
+    Filters, CallbackQueryHandler, ConversationHandler, CallbackContext, InlineQueryHandler
 )
 
 from src.adapters.controllers.telegram_controller import TelegramController
+from uuid import uuid4
 
 
 class TelegramBot:
@@ -154,6 +155,50 @@ Você pode:
         reply_markup = InlineKeyboardMarkup(keyboard)
         update.message.reply_text(response, reply_markup=reply_markup)
     
+    def inline_query(self, update: Update, context: CallbackContext) -> None:
+        query = update.inline_query.query
+        if not query:
+            return
+
+        results = []
+        try:
+            # Resultado para previsão atual
+            current_weather = self.controller.get_current_forecast_by_city(query)
+            results.append(
+                InlineQueryResultArticle(
+                    id=str(uuid4()),
+                    title=f"Previsão Atual - {query}",
+                    description="Mostrar previsão do tempo atual",
+                    input_message_content=InputTextMessageContent(current_weather)
+                )
+            )
+
+            # Resultado para previsão estendida
+            extended_weather = self.controller.get_extended_forecast_by_city(query)
+            results.append(
+                InlineQueryResultArticle(
+                    id=str(uuid4()),
+                    title=f"Previsão 5 Dias - {query}",
+                    description="Mostrar previsão do tempo para 5 dias",
+                    input_message_content=InputTextMessageContent(extended_weather)
+                )
+            )
+
+        except Exception as e:
+            self.logger.error(f"Erro na consulta inline: {str(e)}")
+            results.append(
+                InlineQueryResultArticle(
+                    id=str(uuid4()),
+                    title="Erro",
+                    description="Não foi possível obter a previsão do tempo",
+                    input_message_content=InputTextMessageContent(
+                        "Desculpe, não foi possível obter a previsão do tempo para esta cidade."
+                    )
+                )
+            )
+
+        update.inline_query.answer(results, cache_time=300)
+
     def error_handler(self, update: Update, context: CallbackContext) -> None:
         self.logger.warning('Update "%s" caused error "%s"', update, context.error)
     
@@ -168,6 +213,7 @@ Você pode:
         dp.add_handler(CommandHandler("previsao_estendida", self.extended_forecast, pass_args=True))
         dp.add_handler(CallbackQueryHandler(self.button_callback))
         dp.add_handler(MessageHandler(Filters.location, self.handle_location))
+        dp.add_handler(InlineQueryHandler(self.inline_query))
         
         dp.add_error_handler(self.error_handler)
         
