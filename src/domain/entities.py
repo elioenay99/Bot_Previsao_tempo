@@ -29,7 +29,7 @@ class ExtendedForecast:
 class UserFavorites:
     def __init__(self, user_id: int, favorites: list[str] = None):
         self.user_id = user_id
-        self.favorites = favorites or []
+        self.favorites = [city.lower() for city in (favorites or [])]
 
     def add_favorite(self, city: str) -> bool:
         city = city.lower()
