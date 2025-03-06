@@ -3,7 +3,7 @@ Testes unitários para entidades de domínio.
 """
 import pytest
 from datetime import datetime, timedelta
-from src.domain.entities import WeatherCondition, WeatherForecast, ExtendedForecast
+from src.domain.entities import WeatherCondition, WeatherForecast, ExtendedForecast, UserFavorites
 
 
 class TestWeatherCondition:
@@ -59,3 +59,69 @@ class TestExtendedForecast:
         """Testa que as previsões diárias podem ser recuperadas."""
         daily_forecasts = extended_forecast.get_daily_forecasts()
         assert daily_forecasts == forecasts_list  # Na atual implementação, simplesmente retorna todos os forecasts
+
+
+class TestUserFavorites:
+    """Testes para a entidade UserFavorites."""
+
+    def test_user_favorites_creation(self):
+        """Testa a criação de favoritos do usuário."""
+        favorites = UserFavorites(user_id=123)
+        assert favorites.user_id == 123
+        assert favorites.favorites == []
+
+        favorites_with_cities = UserFavorites(user_id=123, favorites=["São Paulo", "Rio de Janeiro"])
+        assert favorites_with_cities.favorites == ["são paulo", "rio de janeiro"]
+
+    def test_add_favorite(self):
+        """Testa a adição de uma cidade aos favoritos."""
+        favorites = UserFavorites(user_id=123)
+        
+        # Adiciona primeira cidade
+        result = favorites.add_favorite("São Paulo")
+        assert result is True
+        assert "são paulo" in favorites.favorites
+        
+        # Tenta adicionar mesma cidade novamente
+        result = favorites.add_favorite("SÃO PAULO")
+        assert result is False
+        assert len(favorites.favorites) == 1
+
+    def test_remove_favorite(self):
+        """Testa a remoção de uma cidade dos favoritos."""
+        favorites = UserFavorites(user_id=123, favorites=["São Paulo", "Rio de Janeiro"])
+        
+        # Remove cidade existente
+        result = favorites.remove_favorite("São Paulo")
+        assert result is True
+        assert "são paulo" not in favorites.favorites
+        assert len(favorites.favorites) == 1
+        
+        # Tenta remover cidade que não existe
+        result = favorites.remove_favorite("Curitiba")
+        assert result is False
+        assert len(favorites.favorites) == 1
+
+    def test_list_favorites(self):
+        """Testa a listagem de cidades favoritas."""
+        original_favorites = ["São Paulo", "Rio de Janeiro"]
+        favorites = UserFavorites(user_id=123, favorites=original_favorites)
+        
+        # Obtém lista de favoritos
+        result = favorites.list_favorites()
+        assert result == ["são paulo", "rio de janeiro"]
+        
+        # Modifica a lista retornada
+        result.append("curitiba")
+        # Verifica que a lista original não foi modificada
+        assert len(favorites.favorites) == 2
+        assert "curitiba" not in favorites.favorites
+
+    def test_has_favorite(self):
+        """Testa a verificação de cidade favorita."""
+        favorites = UserFavorites(user_id=123, favorites=["São Paulo", "Rio de Janeiro"])
+        
+        assert favorites.has_favorite("São Paulo") is True
+        assert favorites.has_favorite("são paulo") is True
+        assert favorites.has_favorite("SÃO PAULO") is True
+        assert favorites.has_favorite("Curitiba") is False

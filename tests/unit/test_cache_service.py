@@ -73,3 +73,25 @@ class TestMemoryCacheService:
             assert items_count == 4
         else:
             assert items_count == 5
+    
+    def test_get_nonexistent_key(self, cache_service):
+        """Testa que get() retorna None para chaves inexistentes."""
+        # Get nonexistent item
+        result = cache_service.get("nonexistent_key")
+        
+        # Assert
+        assert result is None
+    
+    def test_expiry_and_get(self, cache_service):
+        """Testa que get() retorna None para itens expirados."""
+        # Set item
+        cache_service.set("test_key", "test_value")
+        
+        # Wait for TTL to expire
+        time.sleep(3)
+        
+        # Get expired item
+        result = cache_service.get("test_key")
+        
+        # Assert
+        assert result is None
