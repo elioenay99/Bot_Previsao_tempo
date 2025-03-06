@@ -1,6 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Tuple
-from src.domain.entities import WeatherForecast, ExtendedForecast, WeatherCondition
+from src.domain.entities import WeatherForecast, ExtendedForecast, WeatherCondition, UserFavorites
 
 
 class WeatherRepository(ABC):
@@ -38,4 +37,14 @@ class CacheService(ABC):
     
     @abstractmethod
     def has(self, key: str) -> bool:
+        pass
+
+
+class FavoritesRepository(ABC):
+    @abstractmethod
+    def save_favorites(self, favorites: UserFavorites) -> None:
+        pass
+
+    @abstractmethod
+    def get_favorites(self, user_id: int) -> UserFavorites:
         pass

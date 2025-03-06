@@ -1,6 +1,3 @@
-"""
-Main file for the Weather Forecast Bot application.
-"""
 import logging
 import os
 
@@ -14,13 +11,11 @@ from src.frameworks.telegram.bot import TelegramBot
 try:
     from config.settings import TELEGRAM_TOKEN, OPENWEATHER_TOKEN
 except ImportError:
-    # If not found, try to get from environment
     TELEGRAM_TOKEN = os.environ.get('TELEGRAM_TOKEN')
     OPENWEATHER_TOKEN = os.environ.get('OPENWEATHER_TOKEN')
 
 
 def setup_logging():
-    """Configure logging for the application."""
     logging.basicConfig(
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         level=logging.INFO
@@ -29,12 +24,10 @@ def setup_logging():
 
 
 def main():
-    """Main entry point for the application."""
     # Setup logging
     logger = setup_logging()
     logger.info("Starting Weather Forecast Bot")
-    
-    # Check if API keys are available
+
     if not TELEGRAM_TOKEN or not OPENWEATHER_TOKEN:
         logger.error("API keys not found. Please set TELEGRAM_TOKEN and OPENWEATHER_TOKEN")
         return

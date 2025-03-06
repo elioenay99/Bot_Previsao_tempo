@@ -6,6 +6,7 @@ from telegram.ext import (
 )
 
 from src.adapters.controllers.telegram_controller import TelegramController
+from src.adapters.repositories.favorites_repository import JsonFavoritesRepository
 from uuid import uuid4
 
 
@@ -14,6 +15,7 @@ class TelegramBot:
     def __init__(self, telegram_token: str, controller: TelegramController):
         self.token = telegram_token
         self.controller = controller
+        self.favorites_repository = JsonFavoritesRepository()
         self.logger = logging.getLogger(__name__)
     
     def start(self, update: Update, context: CallbackContext) -> None:
@@ -22,7 +24,10 @@ class TelegramBot:
                 InlineKeyboardButton("Previsão Atual", callback_data='current_forecast'),
                 InlineKeyboardButton("Próximos 5 Dias", callback_data='extended_forecast')
             ],
-            [InlineKeyboardButton("Ajuda", callback_data='help')]
+            [
+                InlineKeyboardButton("Favoritos", callback_data='favorites'),
+                InlineKeyboardButton("Ajuda", callback_data='help')
+            ]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         update.message.reply_text(
@@ -36,6 +41,9 @@ Aqui estão os comandos disponíveis e como usá-los:
 /start - Inicia o bot e exibe opções para previsão comum ou estendida.
 /previsao - Obtém a previsão do tempo para a sua localização. Uso: /previsao <nome_da_cidade>
 /previsao_estendida - Obtém a previsão do tempo estendida para a sua localização. Uso: /previsao_estendida <nome_da_cidade>
+/favoritar - Adiciona uma cidade aos favoritos. Uso: /favoritar <nome_da_cidade>
+/desfavoritar - Remove uma cidade dos favoritos. Uso: /desfavoritar <nome_da_cidade>
+/favoritos - Lista suas cidades favoritas.
 /ajuda - Mostra esta mensagem de ajuda.
 
 Você também pode compartilhar sua localização diretamente com o bot para receber a previsão do tempo.
@@ -52,12 +60,14 @@ Aqui estão os comandos disponíveis e como usá-los:
 
 • Previsão Atual - Obtém a previsão do tempo atual para sua cidade
 • Próximos 5 Dias - Obtém a previsão estendida para os próximos dias
+• Favoritos - Gerencia suas cidades favoritas
 • Ajuda - Mostra esta mensagem de ajuda
 
 Você pode:
 1. Clicar nos botões do menu
 2. Compartilhar sua localização
 3. Digite o nome de uma cidade após selecionar o tipo de previsão
+4. Use /favoritar e /desfavoritar para gerenciar favoritos
 """
             keyboard = [
                 [InlineKeyboardButton("Voltar ao Menu", callback_data='start')]
@@ -72,7 +82,10 @@ Você pode:
                     InlineKeyboardButton("Previsão Atual", callback_data='current_forecast'),
                     InlineKeyboardButton("Próximos 5 Dias", callback_data='extended_forecast')
                 ],
-                [InlineKeyboardButton("Ajuda", callback_data='help')]
+                [
+                    InlineKeyboardButton("Favoritos", callback_data='favorites'),
+                    InlineKeyboardButton("Ajuda", callback_data='help')
+                ]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
             query.edit_message_text(
@@ -81,9 +94,67 @@ Você pode:
             )
             return
 
+        if query.data == 'favorites':
+            user_id = update.effective_user.id
+            favorites = self.favorites_repository.get_favorites(user_id)
+            favorite_list = favorites.list_favorites()
+            
+            if not favorite_list:
+                keyboard = [[InlineKeyboardButton("Voltar ao Menu", callback_data='start')]]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                query.edit_message_text(
+                    text="Você ainda não tem cidades favoritas.\nUse /favoritar <cidade> para adicionar uma.",
+                    reply_markup=reply_markup
+                )
+                return
+
+            keyboard = [
+                [InlineKeyboardButton("Previsão de Todas as Favoritas", callback_data='all_favorites')]
+            ]
+            for city in favorite_list:
+                keyboard.append([
+                    InlineKeyboardButton(f"Previsão para {city}", callback_data=f'fav_forecast_{city}'),
+                ])
+            keyboard.append([InlineKeyboardButton("Voltar ao Menu", callback_data='start')])
+            
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            query.edit_message_text(
+                text="Suas cidades favoritas:",
+                reply_markup=reply_markup
+            )
+            return
+
+        if query.data == 'all_favorites':
+            user_id = update.effective_user.id
+            favorites = self.favorites_repository.get_favorites(user_id)
+            favorite_list = favorites.list_favorites()
+            
+            response = "Previsão para todas as suas cidades favoritas:\n\n"
+            for city in favorite_list:
+                city_forecast = self.controller.get_current_forecast_by_city(city)
+                response += f"=== {city} ===\n{city_forecast}\n\n"
+            
+            keyboard = [[InlineKeyboardButton("Voltar aos Favoritos", callback_data='favorites')]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            query.edit_message_text(text=response, reply_markup=reply_markup)
+            return
+
+        if query.data.startswith('fav_forecast_'):
+            city = query.data.replace('fav_forecast_', '')
+            response = self.controller.get_current_forecast_by_city(city)
+            keyboard = [[InlineKeyboardButton("Voltar aos Favoritos", callback_data='favorites')]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            query.edit_message_text(text=response, reply_markup=reply_markup)
+            return
+
         context.user_data['forecast_type'] = query.data
+        keyboard = [
+            [InlineKeyboardButton("Voltar ao Menu", callback_data='start')]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
         query.edit_message_text(
-            text="Por favor, compartilhe sua localização ou digite o nome de uma cidade."
+            text="Por favor, digite o nome de uma cidade ou compartilhe sua localização.",
+            reply_markup=reply_markup
         )
 
     def handle_location(self, update: Update, context: CallbackContext) -> None:
@@ -202,6 +273,79 @@ Você pode:
     def error_handler(self, update: Update, context: CallbackContext) -> None:
         self.logger.warning('Update "%s" caused error "%s"', update, context.error)
     
+    def favorite_city(self, update: Update, context: CallbackContext) -> None:
+        if not context.args:
+            update.message.reply_text(
+                "Por favor, forneça o nome da cidade. Exemplo: /favoritar Londres"
+            )
+            return
+        
+        city_name = ' '.join(context.args)
+        user_id = update.effective_user.id
+        favorites = self.favorites_repository.get_favorites(user_id)
+        
+        if favorites.add_favorite(city_name):
+            self.favorites_repository.save_favorites(favorites)
+            update.message.reply_text(f"A cidade {city_name} foi adicionada aos seus favoritos!")
+        else:
+            update.message.reply_text(f"A cidade {city_name} já está nos seus favoritos!")
+
+    def unfavorite_city(self, update: Update, context: CallbackContext) -> None:
+        if not context.args:
+            update.message.reply_text(
+                "Por favor, forneça o nome da cidade. Exemplo: /desfavoritar Londres"
+            )
+            return
+        
+        city_name = ' '.join(context.args)
+        user_id = update.effective_user.id
+        favorites = self.favorites_repository.get_favorites(user_id)
+        
+        if favorites.remove_favorite(city_name):
+            self.favorites_repository.save_favorites(favorites)
+            update.message.reply_text(f"A cidade {city_name} foi removida dos seus favoritos!")
+        else:
+            update.message.reply_text(f"A cidade {city_name} não estava nos seus favoritos!")
+
+    def list_favorites(self, update: Update, context: CallbackContext) -> None:
+        user_id = update.effective_user.id
+        favorites = self.favorites_repository.get_favorites(user_id)
+        favorite_list = favorites.list_favorites()
+        
+        if not favorite_list:
+            update.message.reply_text(
+                "Você ainda não tem cidades favoritas.\nUse /favoritar <cidade> para adicionar uma."
+            )
+            return
+        
+        message = "Suas cidades favoritas:\n\n"
+        for city in favorite_list:
+            message += f"• {city}\n"
+        message += "\nUse /previsao <cidade> para ver a previsão do tempo."
+        
+        update.message.reply_text(message)
+
+    def handle_text(self, update: Update, context: CallbackContext) -> None:
+        forecast_type = context.user_data.get('forecast_type')
+        if not forecast_type:
+            return
+
+        city_name = update.message.text
+        
+        if forecast_type == 'current_forecast':
+            response = self.controller.get_current_forecast_by_city(city_name)
+        elif forecast_type == 'extended_forecast':
+            response = self.controller.get_extended_forecast_by_city(city_name)
+        else:
+            return
+
+        keyboard = [
+            [InlineKeyboardButton("Voltar ao Menu", callback_data='start')]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        update.message.reply_text(response, reply_markup=reply_markup)
+        context.user_data.pop('forecast_type', None)
+
     def run(self) -> None:
         updater = Updater(self.token, use_context=True)
         dp = updater.dispatcher
@@ -211,8 +355,12 @@ Você pode:
         dp.add_handler(CommandHandler("ajuda", self.help_command))
         dp.add_handler(CommandHandler("previsao", self.current_forecast, pass_args=True))
         dp.add_handler(CommandHandler("previsao_estendida", self.extended_forecast, pass_args=True))
+        dp.add_handler(CommandHandler("favoritar", self.favorite_city, pass_args=True))
+        dp.add_handler(CommandHandler("desfavoritar", self.unfavorite_city, pass_args=True))
+        dp.add_handler(CommandHandler("favoritos", self.list_favorites))
         dp.add_handler(CallbackQueryHandler(self.button_callback))
         dp.add_handler(MessageHandler(Filters.location, self.handle_location))
+        dp.add_handler(MessageHandler(Filters.text & ~Filters.command, self.handle_text))
         dp.add_handler(InlineQueryHandler(self.inline_query))
         
         dp.add_error_handler(self.error_handler)

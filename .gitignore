@@ -1,3 +1,26 @@
-.idea
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
+# Virtual environment
+venv/
+env/
+
+# IDE settings
+.idea/
+.vscode/
+
+# Environment variables
+.env
+
+# User data
+data/
+
 /.venv/
 /config/settings.py
+/.idea/
