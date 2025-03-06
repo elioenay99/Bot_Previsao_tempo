@@ -17,11 +17,17 @@ class TelegramBot:
     
     def start(self, update: Update, context: CallbackContext) -> None:
         keyboard = [
-            [InlineKeyboardButton("Previsão Comum", callback_data='previsao_comum')],
-            [InlineKeyboardButton("Previsão Estendida", callback_data='previsao_estendida')]
+            [
+                InlineKeyboardButton("Previsão Atual", callback_data='current_forecast'),
+                InlineKeyboardButton("Próximos 5 Dias", callback_data='extended_forecast')
+            ],
+            [InlineKeyboardButton("Ajuda", callback_data='help')]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        update.message.reply_text('Escolha o tipo de previsão:', reply_markup=reply_markup)
+        update.message.reply_text(
+            'Olá! Sou o Bot de Previsão do Tempo. Como posso ajudar?',
+            reply_markup=reply_markup
+        )
     
     def help_command(self, update: Update, context: CallbackContext) -> None:
         mensagem_ajuda = """
@@ -39,42 +45,114 @@ Você também pode compartilhar sua localização diretamente com o bot para rec
         query = update.callback_query
         query.answer()
 
-        context.user_data['forecast_type'] = query.data
+        if query.data == 'help':
+            mensagem_ajuda = """
+Aqui estão os comandos disponíveis e como usá-los:
 
-        query.edit_message_text(text="Por favor, compartilhe sua localização ou digite o nome de uma cidade.")
+• Previsão Atual - Obtém a previsão do tempo atual para sua cidade
+• Próximos 5 Dias - Obtém a previsão estendida para os próximos dias
+• Ajuda - Mostra esta mensagem de ajuda
+
+Você pode:
+1. Clicar nos botões do menu
+2. Compartilhar sua localização
+3. Digite o nome de uma cidade após selecionar o tipo de previsão
+"""
+            keyboard = [
+                [InlineKeyboardButton("Voltar ao Menu", callback_data='start')]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            query.edit_message_text(text=mensagem_ajuda, reply_markup=reply_markup)
+            return
+
+        if query.data == 'start':
+            keyboard = [
+                [
+                    InlineKeyboardButton("Previsão Atual", callback_data='current_forecast'),
+                    InlineKeyboardButton("Próximos 5 Dias", callback_data='extended_forecast')
+                ],
+                [InlineKeyboardButton("Ajuda", callback_data='help')]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            query.edit_message_text(
+                text='Olá! Sou o Bot de Previsão do Tempo. Como posso ajudar?',
+                reply_markup=reply_markup
+            )
+            return
+
+        context.user_data['forecast_type'] = query.data
+        query.edit_message_text(
+            text="Por favor, compartilhe sua localização ou digite o nome de uma cidade."
+        )
 
     def handle_location(self, update: Update, context: CallbackContext) -> None:
         user_location = update.message.location
-        forecast_type = context.user_data.get('forecast_type', 'previsao_comum')
+        forecast_type = context.user_data.get('forecast_type', 'current_forecast')
         
-        if forecast_type == 'previsao_comum':
+        if forecast_type == 'current_forecast':
             response = self.controller.get_current_forecast_by_location(
                 user_location.latitude, user_location.longitude
             )
-        else:
+        elif forecast_type == 'extended_forecast':
             response = self.controller.get_extended_forecast_by_location(
                 user_location.latitude, user_location.longitude
             )
         
-        update.message.reply_text(response)
+        keyboard = [
+            [InlineKeyboardButton("Voltar ao Menu", callback_data='start')]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        update.message.reply_text(response, reply_markup=reply_markup)
     
     def current_forecast(self, update: Update, context: CallbackContext) -> None:
         if not context.args:
-            update.message.reply_text("Por favor, forneça o nome da cidade. Exemplo: /previsao Londres")
+            keyboard = [
+                [
+                    InlineKeyboardButton("Previsão Atual", callback_data='current_forecast'),
+                    InlineKeyboardButton("Próximos 5 Dias", callback_data='extended_forecast')
+                ],
+                [InlineKeyboardButton("Ajuda", callback_data='help')]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            update.message.reply_text(
+                "Por favor, forneça o nome da cidade. Exemplo: /previsao Londres",
+                reply_markup=reply_markup
+            )
             return
         
         city_name = ' '.join(context.args)
         response = self.controller.get_current_forecast_by_city(city_name)
-        update.message.reply_text(response)
+        
+        keyboard = [
+            [InlineKeyboardButton("Voltar ao Menu", callback_data='start')]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        update.message.reply_text(response, reply_markup=reply_markup)
     
     def extended_forecast(self, update: Update, context: CallbackContext) -> None:
         if not context.args:
-            update.message.reply_text("Por favor, forneça o nome da cidade. Exemplo: /previsao_estendida Londres")
+            keyboard = [
+                [
+                    InlineKeyboardButton("Previsão Atual", callback_data='current_forecast'),
+                    InlineKeyboardButton("Próximos 5 Dias", callback_data='extended_forecast')
+                ],
+                [InlineKeyboardButton("Ajuda", callback_data='help')]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            update.message.reply_text(
+                "Por favor, forneça o nome da cidade. Exemplo: /previsao_estendida Londres",
+                reply_markup=reply_markup
+            )
             return
         
         city_name = ' '.join(context.args)
         response = self.controller.get_extended_forecast_by_city(city_name)
-        update.message.reply_text(response)
+        
+        keyboard = [
+            [InlineKeyboardButton("Voltar ao Menu", callback_data='start')]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        update.message.reply_text(response, reply_markup=reply_markup)
     
     def error_handler(self, update: Update, context: CallbackContext) -> None:
         self.logger.warning('Update "%s" caused error "%s"', update, context.error)
