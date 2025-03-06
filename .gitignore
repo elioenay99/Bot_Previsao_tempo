@@ -1,4 +1,3 @@
-/config/settings.py
 .idea
 /.venv/
-!/config/settings.py
+/config/settings.py
