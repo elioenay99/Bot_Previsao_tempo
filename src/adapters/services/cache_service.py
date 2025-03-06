@@ -1,3 +1,6 @@
+"""
+Implementação do serviço de cache em memória.
+"""
 from cachetools import TTLCache
 from src.domain.interfaces import CacheService
 
@@ -12,9 +15,7 @@ class MemoryCacheService(CacheService):
         return self.cache.get(key)
     
     def set(self, key: str, value, ttl: int = None):
-        if ttl is not None:
-            pass
-        
+        # TTLCache não suporta TTL por item, então ignoramos o parâmetro ttl
         self.cache[key] = value
     
     def has(self, key: str) -> bool:
