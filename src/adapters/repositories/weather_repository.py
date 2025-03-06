@@ -44,13 +44,41 @@ class OpenWeatherRepository(WeatherRepository):
         temperature = data['main']['temp']
         condition_text = data['weather'][0]['description']
         weather_condition = self.translator.translate_condition(condition_text)
-        location = data.get('name', f"Lat: {latitude}, Lon: {longitude}")
+        
+        # Usa o nome da cidade se disponível, senão usa as coordenadas
+        location = data.get('name') or f"Lat: {latitude}, Lon: {longitude}"
         
         return WeatherForecast(
             temperature=temperature,
             condition=weather_condition,
             location=location,
             timestamp=datetime.now()
+        )
+    
+    def _process_extended_forecast_data(self, data: dict, location: str) -> ExtendedForecast:
+        """Processa os dados da previsão estendida agrupando por dia."""
+        daily_forecasts = {}
+        
+        for item in data['list']:
+            timestamp = datetime.strptime(item['dt_txt'], "%Y-%m-%d %H:%M:%S")
+            date_key = timestamp.date()
+            
+            # Pega apenas a primeira previsão de cada dia
+            if date_key not in daily_forecasts:
+                temperature = item['main']['temp']
+                condition_text = item['weather'][0]['description']
+                weather_condition = self.translator.translate_condition(condition_text)
+                
+                daily_forecasts[date_key] = WeatherForecast(
+                    temperature=temperature,
+                    condition=weather_condition,
+                    location=location,
+                    timestamp=timestamp
+                )
+        
+        return ExtendedForecast(
+            location=location,
+            forecasts=list(daily_forecasts.values())
         )
     
     def get_extended_forecast_by_city(self, city_name: str) -> ExtendedForecast:
@@ -61,27 +89,7 @@ class OpenWeatherRepository(WeatherRepository):
             raise Exception(f"Failed to fetch forecast data: {response.status_code}")
         
         data = response.json()
-        
-        forecasts = []
-        for item in data['list'][::8]:
-            temperature = item['main']['temp']
-            condition_text = item['weather'][0]['description']
-            weather_condition = self.translator.translate_condition(condition_text)
-            timestamp = datetime.strptime(item['dt_txt'], "%Y-%m-%d %H:%M:%S")
-            
-            forecasts.append(
-                WeatherForecast(
-                    temperature=temperature,
-                    condition=weather_condition,
-                    location=city_name,
-                    timestamp=timestamp
-                )
-            )
-        
-        return ExtendedForecast(
-            location=city_name,
-            forecasts=forecasts
-        )
+        return self._process_extended_forecast_data(data, city_name)
     
     def get_extended_forecast_by_coordinates(self, latitude: float, longitude: float) -> ExtendedForecast:
         url = f"{self.base_url}/forecast?lat={latitude}&lon={longitude}&appid={self.api_key}&units=metric"
@@ -91,26 +99,6 @@ class OpenWeatherRepository(WeatherRepository):
             raise Exception(f"Failed to fetch forecast data: {response.status_code}")
         
         data = response.json()
-        
-        location = data.get('city', {}).get('name', f"Lat: {latitude}, Lon: {longitude}")
-        
-        forecasts = []
-        for item in data['list'][::8]:
-            temperature = item['main']['temp']
-            condition_text = item['weather'][0]['description']
-            weather_condition = self.translator.translate_condition(condition_text)
-            timestamp = datetime.strptime(item['dt_txt'], "%Y-%m-%d %H:%M:%S")
-            
-            forecasts.append(
-                WeatherForecast(
-                    temperature=temperature,
-                    condition=weather_condition,
-                    location=location,
-                    timestamp=timestamp
-                )
-            )
-        
-        return ExtendedForecast(
-            location=location,
-            forecasts=forecasts
-        )
+        # Usa o nome da cidade se disponível, senão usa as coordenadas
+        location = data.get('city', {}).get('name') or f"Lat: {latitude}, Lon: {longitude}"
+        return self._process_extended_forecast_data(data, location)
